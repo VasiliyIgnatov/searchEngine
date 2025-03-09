@@ -254,6 +254,6 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         if (matcher.find()) {
             return matcher.group(1).trim();
         }
-        return "";
+        return "Заголовок для данной страницы отсутствует";
     }
 }
