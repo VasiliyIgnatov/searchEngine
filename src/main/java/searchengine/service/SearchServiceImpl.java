@@ -17,6 +17,7 @@ import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.utils.FinderLemma;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 @Service
 public class SearchServiceImpl implements SearchService<SearchResponse> {
-    private final FinderLemmaService finderLemmaService;
+    private final FinderLemma finderLemmaService;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final PageRepository pageRepository;
@@ -72,8 +73,8 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
     public List<SearchResult> searchResults(String query, String site) {
 
 
-        List<String> targetWordsRu = finderLemmaService.extractWordsFromContent(query, FinderLemmaService.REGEX_RU);
-        List<String> targetWordsEng = finderLemmaService.extractWordsFromContent(query, FinderLemmaService.REGEX_ENG);
+        List<String> targetWordsRu = finderLemmaService.extractWordsFromContent(query, FinderLemma.REGEX_RU);
+        List<String> targetWordsEng = finderLemmaService.extractWordsFromContent(query, FinderLemma.REGEX_ENG);
         Set<String> lemmasSet = new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsRu, luceneMorphologyRu).keySet());
         lemmasSet.addAll(new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsEng, luceneMorphologyEng).keySet()));
 
@@ -169,15 +170,28 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
     }
 
     private String getSnippet(String content, String query) {
-        if (StringUtils.isBlank(query) || StringUtils.isBlank(content)) {
+        String plainText = prepareText(content);
+
+        String snippet = buildSnippet(plainText, query);
+        log.info(snippet);
+
+        return snippet;
+    }
+
+    private String prepareText(String content) {
+        if (StringUtils.isBlank(content)) {
             return "";
         }
 
-        String plainText =
-                content.replaceAll("<[^>]+>", " ")
-                        .replaceAll("\\s+", " ")
-                        .trim();
+        return content.replaceAll("<[^>]+>", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
 
+    private String buildSnippet(String plainText, String query) {
+        if (StringUtils.isBlank(query) || StringUtils.isBlank(plainText)) {
+            return "";
+        }
 
         Pattern pattern = Pattern.compile("(?i)\\b" + Pattern.quote(query) + "\\b");
         Matcher matcher = pattern.matcher(plainText);
@@ -190,17 +204,14 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         int queryEnd = matcher.end();
 
         int snippetLength = 100;
-
-
         int snippetStart = Math.max(0, queryStart - snippetLength);
-        while (snippetStart > 0 &&
-                !Character.isWhitespace(plainText.charAt(snippetStart - 1))) {
+        int snippetEnd = Math.min(plainText.length(), queryEnd + snippetLength);
+
+        while (snippetStart > 0 && !Character.isWhitespace(plainText.charAt(snippetStart - 1))) {
             snippetStart--;
         }
 
-        int snippetEnd = Math.min(plainText.length(), queryEnd + snippetLength);
-        while (snippetEnd < plainText.length() &&
-                !Character.isWhitespace(plainText.charAt(snippetEnd))) {
+        while (snippetEnd < plainText.length() && !Character.isWhitespace(plainText.charAt(snippetEnd))) {
             snippetEnd++;
         }
 
@@ -218,13 +229,9 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
             snippetBuilder.append("...");
         }
 
-        String snippet = snippetBuilder.toString();
-        snippet = snippet.replaceAll("\\s+", " ").trim();
-
-        log.info(snippet);
-
-        return snippet;
-
+        return snippetBuilder.toString()
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     @Transactional(readOnly = true)

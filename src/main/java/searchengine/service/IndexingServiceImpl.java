@@ -17,6 +17,10 @@ import searchengine.exceptions.StopIndexingException;
 import searchengine.model.*;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.utils.FinderLemma;
+import searchengine.utils.IndexingPages;
+import searchengine.utils.IndexingSitesByPages;
+import searchengine.utils.SiteData;
 
 import java.io.IOException;
 import java.net.URL;
@@ -37,11 +41,11 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
     private final SitesList sitesList;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
-    private final SiteDataService siteDataService;
+    private final SiteData siteDataService;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
     private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 4);
-    private final IndexingPagesService pageService;
-    private final FinderLemmaService finderLemmaService;
+    private final IndexingPages pageService;
+    private final FinderLemma finderLemmaService;
     private final String userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0";
     private final String referrer = "https://www.google.com";
     private final ConcurrentLinkedQueue<UrlPage> pageQueue = new ConcurrentLinkedQueue<>();
@@ -155,7 +159,7 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
             return;
         ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors() / 4);
         try {
-            pool.invoke(new IndexingPages(isIndexing, url, pageRepository,
+            pool.invoke(new IndexingSitesByPages(isIndexing, url, pageRepository,
                     siteModel, pageService, userAgent, referrer, finderLemmaService));
         } finally {
             pool.shutdown();
