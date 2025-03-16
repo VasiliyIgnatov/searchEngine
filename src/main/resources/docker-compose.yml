@@ -12,19 +12,24 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - db_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
 
   app:
     build: ../../..
     container_name: search_app
     ports:
       - "8080:8080"
-    depends_on:
-      - db
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/search_engine
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: pass
+    networks:
+      - app-network
 
 volumes:
-  db_data:
+  mysql_data:
+
+networks:
+  app-network:

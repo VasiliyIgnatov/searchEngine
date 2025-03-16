@@ -43,7 +43,7 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
     private final SiteRepository siteRepository;
     private final SiteData siteDataService;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
-    private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 4);
+    private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     private final IndexingPages pageService;
     private final FinderLemma finderLemmaService;
     private final String userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0";
@@ -157,7 +157,7 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
     public void pagesIndexing(SiteModel siteModel, String url) {
         if (!isIndexing.get())
             return;
-        ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors() / 4);
+        ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
         try {
             pool.invoke(new IndexingSitesByPages(isIndexing, url, pageRepository,
                     siteModel, pageService, userAgent, referrer, finderLemmaService));
