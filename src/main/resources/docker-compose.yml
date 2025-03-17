@@ -17,7 +17,7 @@ services:
       - app-network
 
   app:
-    build: ../../..
+    build: .
     container_name: search_app
     ports:
       - "8080:8080"
