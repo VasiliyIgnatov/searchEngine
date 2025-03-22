@@ -42,7 +42,8 @@
   
 ## Установка
 
-Из GitHub:
+**Из GitHub**:
+
 1. Клонируйте репозиторий из GitHub в терминале:
    ```bash
    git clone https://github.com/VasiliyIgnatov/searchEngine
@@ -61,7 +62,8 @@
 
 5. Перейдите в браузер и откройте http://localhost:8080. Вы увидите интерфейс приложения.
 
-Из Docker Hub:
+**Из Docker Hub**:
+
 1. Выполните команду в терминале, чтобы загрузить образ из Docker Hub:
    ```bash
    docker pull snufferr/my-search-app
