@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import searchengine.dto.search.SearchResponse;
-import searchengine.service.SearchService;
+import searchengine.service.search.SearchService;
 
 import java.io.IOException;
 

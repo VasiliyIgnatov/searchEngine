@@ -1,4 +1,4 @@
-package searchengine.service;
+package searchengine.service.search;
 
 import java.io.IOException;
 
