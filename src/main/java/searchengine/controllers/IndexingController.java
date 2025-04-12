@@ -7,7 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.dto.indexing.UrlPage;
-import searchengine.service.IndexingService;
+import searchengine.service.indexing.IndexingService;
 
 @RestController
 @RequestMapping("/api")

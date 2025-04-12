@@ -24,4 +24,7 @@ public interface IndexRepository extends JpaRepository<IndexModel, Integer> {
     void deleteByPage(PageModel pageModel);
 
     Integer countByLemma(LemmaModel lemmaModel);
+
+    @Query("SELECT i.page FROM IndexModel i WHERE i.lemma.lemma = :lemma")
+    List<PageModel> findPagesByLemma(@Param("lemma") String lemma);
 }

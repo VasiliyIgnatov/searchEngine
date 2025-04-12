@@ -28,11 +28,12 @@ public class FinderLemma {
     private final IndexRepository indexRepository;
     private final LuceneMorphology luceneMorphologyRu;
     private final LuceneMorphology luceneMorphologyEng;
-    private static final String[] PARTICLES_NAMES = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ", "ЧАСТ", "МС",
+    public static final String[] PARTICLES_NAMES = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ", "ЧАСТ", "МС",
             "ARTICLE", "CONJ", "PREP"};
     private static final int START_FREQUENCY = 1;
     public static final String REGEX_RU = "\\b[А-Яа-яЁё]+\\b";
     public static final String REGEX_ENG = "\\b[A-Za-z]+\\b";
+
 
     @Transactional
     public void processLemma(PageModel pageModel) {
@@ -68,20 +69,18 @@ public class FinderLemma {
                 })
                 .filter(luceneMorphology::checkString)
                 .peek(normalForm -> log.debug("Слово: {}, Статус: {}", normalForm, true))
-                .map(normalForm -> {
+                .flatMap(normalForm -> {
                     try {
-                        List<String> normalForms = new CopyOnWriteArrayList<>();
-                        normalForms.add(luceneMorphology.getNormalForms(normalForm).get(0));
-                        return normalForms;
+                        List<String> normalForms = luceneMorphology.getNormalForms(normalForm);
+                        return normalForms != null ? normalForms.stream() : Stream.empty();
                     } catch (Exception e) {
                         log.warn("Ошибка при получении нормальных форм для '{}': {}", normalForm, e.getMessage());
-                        return new CopyOnWriteArrayList<String>();
+                        return Stream.empty();
                     }
                 })
-                .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        log.info("леммы из слов изъяты: {}", filteredWords);
+        log.info("Леммы из слов изъяты: {}", filteredWords);
 
         filteredWords.forEach(lemma -> lemmaCountMap.merge(lemma, 1, Integer::sum));
         return lemmaCountMap;
@@ -90,7 +89,7 @@ public class FinderLemma {
     public List<String> extractWordsFromContent(String content, String regex) {
         List<String> targetWords = new CopyOnWriteArrayList<>();
         if (content.isEmpty()) {
-            log.warn("Контент отсутствует: {}", content);
+            log.warn("Слова отсутствуют: {}", content);
             return new CopyOnWriteArrayList<>() {
             };
         }
@@ -99,7 +98,7 @@ public class FinderLemma {
 
         while (matcher.find()) {
             targetWords.add(matcher.group());
-            log.info("слова из страницы изъяты: {}", matcher.group());
+            log.info("Слова изъяты: {}", matcher.group());
         }
         return targetWords;
     }

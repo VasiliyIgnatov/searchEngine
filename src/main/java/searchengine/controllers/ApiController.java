@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import searchengine.dto.statistics.StatisticsResponse;
 
-import searchengine.service.StatisticsService;
+import searchengine.service.statistics.StatisticsService;
 
 @RestController
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))

@@ -1,4 +1,4 @@
-package searchengine.service;
+package searchengine.service.indexing;
 
 import searchengine.dto.indexing.UrlPage;
 

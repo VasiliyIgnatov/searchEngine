@@ -5,7 +5,7 @@ spring:
   datasource:
     username: user
     password: pass
-    url: jdbc:mysql://db:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
   jpa:
     properties:
       hibernate:
@@ -21,6 +21,8 @@ indexing-settings:
       name: Skillbox
     - url: https://www.playback.ru
       name: playback
+    - url: https://sendel.ru
+      name: Sendel
 
 
 
