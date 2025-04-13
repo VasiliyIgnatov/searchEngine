@@ -15,8 +15,8 @@ import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @Slf4j
 @Service
@@ -32,7 +32,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     public StatisticsResponse getStatistics() {
         TotalStatistics total = new TotalStatistics();
         total.setSites(siteRepository.count());
-        List<DetailedStatisticsItem> detailed = new CopyOnWriteArrayList<>();
+        List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<SiteModel> sitesList = siteRepository.findAll();
 
         long totalPages = sitesList.stream()

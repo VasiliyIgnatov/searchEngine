@@ -23,7 +23,6 @@ import searchengine.utils.FinderLemma;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -83,7 +82,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
             return Collections.emptyList();
         }
         Map<String, Float> filteredLemmasByFrequency = getFilteredLemmas(lemmasSet, totalPages, siteModel);
-        List<String> sortedLemmasByFrequency = sortLemmasByFrequency(filteredLemmasByFrequency);
+        Set<String> sortedLemmasByFrequency = sortLemmasByFrequency(filteredLemmasByFrequency);
 
         List<PageModel> pages = findPagesByLemmas(sortedLemmasByFrequency);
 
@@ -118,24 +117,24 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         return filteredLemmasByFrequency.isEmpty() ? Collections.emptyMap() : filteredLemmasByFrequency;
     }
 
-    private List<String> sortLemmasByFrequency(Map<String, Float> lemmaByFrequency) {
+    private Set<String> sortLemmasByFrequency(Map<String, Float> lemmaByFrequency) {
         return lemmaByFrequency.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
-                .distinct()
-                .collect(Collectors.toCollection(CopyOnWriteArrayList::new));
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     @Transactional
-    public List<PageModel> findPagesByLemmas(List<String> sortedLemmasByFrequency) {
+    public List<PageModel> findPagesByLemmas(Set<String> sortedLemmasByFrequency) {
         if (sortedLemmasByFrequency.isEmpty()) {
             return Collections.emptyList();
         }
-        return indexRepository.findPagesByLemma(sortedLemmasByFrequency.get(0));
+        String firstLemma = sortedLemmasByFrequency.iterator().next();
+        return indexRepository.findPagesByLemma(firstLemma);
     }
 
     @Transactional
-    public List<SearchResult> processLemmas(List<PageModel> initialPages, String query, List<String> sortedLemmasByFrequency) {
+    public List<SearchResult> processLemmas(List<PageModel> initialPages, String query, Set<String> sortedLemmasByFrequency) {
         Map<PageModel, Float> relevanceMap = calculateRelevance(initialPages);
         return initialPages.stream()
                 .map(page ->
@@ -145,7 +144,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
                 .collect(Collectors.toList());
     }
 
-    private SearchResult createSearchResult(PageModel page, float relevance, String query, List<String> sortedLemmasByFrequency) {
+    private SearchResult createSearchResult(PageModel page, float relevance, String query, Set<String> sortedLemmasByFrequency) {
         String snippet = generateSnippet(page.getContent(), query, sortedLemmasByFrequency);
         String title = extractTitleFromHtml(page.getContent());
         return new SearchResult(page.getSite().getUrl(), page.getSite().getName(), page.getPath(),
@@ -183,12 +182,12 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         return "";
     }
 
-    public String generateSnippet(String content, String query, List<String> sortLemmas) {
+    public String generateSnippet(String content, String query, Set<String> sortLemmas) {
         String plainText = prepareText(content);
         return buildSnippet(plainText, query, sortLemmas);
     }
 
-    private String buildSnippet(String text, String query, List<String> sortLemmas) {
+    private String buildSnippet(String text, String query, Set<String> sortLemmas) {
 
         if (StringUtils.isBlank(query) || StringUtils.isBlank(text)) {
             return "";
@@ -227,15 +226,15 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
 
         String snippetRaw = text.substring(snippetStart, snippetEnd);
 
-        StringBuilder snippetBuilder = new StringBuilder();
+        StringBuilder snippet = new StringBuilder();
 
         if (snippetStart > 0) {
-            snippetBuilder.append("...");
+            snippet.append("...");
         }
 
         List<Match> allMatches = new ArrayList<>();
-       Set <String> allMatchingWords = new HashSet<>(matchingWords);
-       allMatchingWords.addAll(queryWords);
+        Set<String> allMatchingWords = new HashSet<>(matchingWords);
+        allMatchingWords.addAll(queryWords);
 
         allMatchingWords.forEach(word -> {
             Matcher wordMatcher = Pattern.compile("\\b" + word + "\\b")
@@ -246,27 +245,30 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         });
 
         allMatches.sort(Comparator.comparingInt(Match::start));
+        snippet = highlightingSnippet(allMatches, snippetRaw, snippet);
 
+        if (snippetEnd < text.length()) {
+            snippet.append("...");
+        }
+
+        return snippet.toString();
+
+    }
+
+    private StringBuilder highlightingSnippet (List<Match> allMatches, String snippetRaw, StringBuilder snippet) {
         AtomicInteger lastPos = new AtomicInteger(0);
-        allMatches.forEach(match-> {
-            snippetBuilder.append(snippetRaw, lastPos.get(), match.start());
-            snippetBuilder.append("<b>")
+        allMatches.forEach(match -> {
+            snippet.append(snippetRaw, lastPos.get(), match.start());
+            snippet.append("<b>")
                     .append(snippetRaw, match.start(), match.end())
                     .append("</b>");
             lastPos.set(match.end());
         });
 
-        snippetBuilder.append(snippetRaw.substring(lastPos.get()));
-
-        if (snippetEnd < text.length()) {
-            snippetBuilder.append("...");
-        }
-
-        return snippetBuilder.toString();
-
+        return snippet.append(snippetRaw.substring(lastPos.get()));
     }
 
-    private List<String> findAllMatchingWords(List<String> sortedLemmas, List<String> pageWords, List<String> queryWords) {
+    private List<String> findAllMatchingWords(Set<String> sortedLemmas, List<String> pageWords, List<String> queryWords) {
         queryWords.forEach(word -> {
             if (!extractAndProcessLemmas(word).isEmpty() && word.length() > 3) {
                 sortedLemmas.add(word);
@@ -282,7 +284,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
     }
 
     private String findMatchingWord(List<String> matchingWords, List<String> pageWords) {
-        log.info("Matching words: {}", matchingWords);
+        log.info("Все найденные слова: {}", matchingWords);
         return matchingWords.stream()
                 .filter(matchingWord -> pageWords.stream()
                         .anyMatch(word -> matchingWord.equalsIgnoreCase(word) || matchingWord.contains(word)))
