@@ -28,13 +28,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Getter
 @Setter
 @Slf4j
-public class IndexingSitesByPages extends RecursiveAction {
+public class PageIndexingTask extends RecursiveAction {
     private final AtomicBoolean stopIndexing;
     private final String url;
     private final PageRepository pageRepository;
     private final SiteModel siteModel;
     private final Set<String> setUrls = ConcurrentHashMap.newKeySet();
-    private final searchengine.utils.IndexingPages pageService;
+    private final PageManager pageManager;
     private final String userAgent;
     private final String referrer;
     private final FinderLemma finderLemmaService;
@@ -44,7 +44,7 @@ public class IndexingSitesByPages extends RecursiveAction {
     protected void compute() {
         if (!stopIndexing.get()) {
             log.info("Индексация остановлена для url: {}", url);
-            pageService.updateSiteStatus(siteModel, Status.FAILED, "Индексация остановлена пользователем");
+            pageManager.updateSiteStatus(siteModel, Status.FAILED, "Индексация остановлена пользователем");
             return;
         }
         try {
@@ -60,10 +60,10 @@ public class IndexingSitesByPages extends RecursiveAction {
             parseTasks(response);
 
         } catch (ConstraintViolationException | DataIntegrityViolationException e) {
-            log.warn("Ошибка при сохранении PageModel. Дубликат страницы: {}", e.getMessage());
+            log.warn("Ошибка при сохранении страницы. Дубликат страницы: {}", e.getMessage());
         } catch (Exception e) {
             log.error("Ошибка при обработке URL: {}. Сообщение: {}", url, e.getMessage());
-            pageService.updateSiteStatus(siteModel, Status.FAILED, "Ошибка при обработке URL");
+            pageManager.updateSiteStatus(siteModel, Status.FAILED, "Ошибка при обработке URL");
         }
     }
 
@@ -90,19 +90,19 @@ public class IndexingSitesByPages extends RecursiveAction {
             log.error("Дубликат страницы: {}", url);
         } else {
             setUrls.add(url);
-            PageModel pageModel = pageService.createPageModel(code, content, url, siteModel);
+            PageModel pageModel = pageManager.createPageModel(code, content, url, siteModel);
             log.info("Произведена запись с данным url: {}", url);
             finderLemmaService.processLemma(pageModel);
 
 
             Elements elements = document.select("a[href]");
-            List<IndexingSitesByPages> tasks = new CopyOnWriteArrayList<>();
+            List<PageIndexingTask> tasks = new CopyOnWriteArrayList<>();
             for (Element element : elements) {
                 String absUrl = element.absUrl("href");
                 if (absUrl.startsWith(siteModel.getUrl()) && !pageRepository.existsByPath(absUrl)) {
 
-                    tasks.add(new IndexingSitesByPages(stopIndexing, absUrl, pageRepository,
-                            siteModel, pageService, userAgent, referrer, finderLemmaService));
+                    tasks.add(new PageIndexingTask(stopIndexing, absUrl, pageRepository,
+                            siteModel, pageManager, userAgent, referrer, finderLemmaService));
                     log.info("Добавлен новый Task для URL: {}", absUrl);
                 }
             }

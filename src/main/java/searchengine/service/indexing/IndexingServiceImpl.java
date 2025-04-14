@@ -18,9 +18,9 @@ import searchengine.model.*;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.utils.FinderLemma;
-import searchengine.utils.IndexingPages;
-import searchengine.utils.IndexingSitesByPages;
-import searchengine.utils.SiteData;
+import searchengine.utils.PageManager;
+import searchengine.utils.PageIndexingTask;
+import searchengine.utils.SitePersistenceService;
 
 import java.io.IOException;
 import java.net.URL;
@@ -41,10 +41,10 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
     private final SitesList sitesList;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
-    private final SiteData siteDataService;
+    private final SitePersistenceService siteDataService;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
     private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-    private final IndexingPages pageService;
+    private final PageManager pageService;
     private final FinderLemma finderLemmaService;
     private final String userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0";
     private final String referrer = "https://www.google.com";
@@ -63,6 +63,7 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
         sites.forEach(site -> executorService.submit(() -> indexSite(site)));
 
         return createSuccessResponse();
+
     }
 
     @Transactional
@@ -159,7 +160,7 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
             return;
         ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
         try {
-            pool.invoke(new IndexingSitesByPages(isIndexing, url, pageRepository,
+            pool.invoke(new PageIndexingTask(isIndexing, url, pageRepository,
                     siteModel, pageService, userAgent, referrer, finderLemmaService));
         } finally {
             pool.shutdown();

@@ -66,11 +66,11 @@
 
 1. Выполните команду в терминале, чтобы загрузить образ из Docker Hub:
    ```bash
-   docker pull snufferr/my-search-app
+   docker pull snufferr/my-search-app:1.0
    
 2. После загрузки образа запустите контейнер с помощью команды:
    ```bash
-   docker run -d -p 8080:80 snufferr/my-search-app
+   docker run -d -p 8080:80 snufferr/my-search-app:1.0
    
 3. Перейдите в браузер и откройте http://localhost:8080. Вы увидите интерфейс приложения.
 

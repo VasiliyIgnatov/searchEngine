@@ -18,7 +18,7 @@ import java.util.List;
 @Service
 @Slf4j
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class SiteData {
+public class SitePersistenceService {
     private final LemmaRepository lemmaRepository;
     private final SiteRepository siteRepository;
     private final IndexRepository indexRepository;

@@ -90,7 +90,15 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
             return Collections.emptyList();
         }
 
-        return processLemmas(pages, query, sortedLemmasByFrequency);
+        List<SearchResult> searchResults = new ArrayList<>(processLemmas(pages, query, sortedLemmasByFrequency));
+
+        if (site.isEmpty()) {
+            return searchResults;
+        }
+
+        return searchResults.stream()
+                .filter(searchResult -> searchResult.getSite().equals(site))
+                .toList();
     }
 
     private Set<String> extractAndProcessLemmas(String query) {

@@ -45,8 +45,8 @@ public class FinderLemma {
 
         lemmaCountMap.forEach((lemma, rank) -> {
             processLemmaEntry(lemma, rank, pageModel);
-            log.info("Произведена запись Lemma: {}, site: {}", lemma, pageModel.getSite().getId());
         });
+        log.info("Произведена запись лемм в количестве: {}", lemmaCountMap.size());
 
     }
 
@@ -68,7 +68,6 @@ public class FinderLemma {
                     return clearForms.stream();
                 })
                 .filter(luceneMorphology::checkString)
-                .peek(normalForm -> log.debug("Слово: {}, Статус: {}", normalForm, true))
                 .flatMap(normalForm -> {
                     try {
                         List<String> normalForms = luceneMorphology.getNormalForms(normalForm);
@@ -78,9 +77,9 @@ public class FinderLemma {
                         return Stream.empty();
                     }
                 })
-                .collect(Collectors.toList());
+                .toList();
 
-        log.info("Леммы из слов изъяты: {}", filteredWords);
+        log.info("Леммы из слов изъяты в количестве: {}", filteredWords.size());
 
         filteredWords.forEach(lemma -> lemmaCountMap.merge(lemma, 1, Integer::sum));
         return lemmaCountMap;
@@ -98,8 +97,8 @@ public class FinderLemma {
 
         while (matcher.find()) {
             targetWords.add(matcher.group());
-            log.info("Слова изъяты: {}", matcher.group());
         }
+        log.info("Количество изъятых слов: {}", targetWords.size());
         return targetWords;
     }
 
@@ -117,7 +116,7 @@ public class FinderLemma {
             lemmaModel.setSite(pageModel.getSite());
         }
         lemmaRepository.save(lemmaModel);
-        log.info("Леммы в базе данных сохранены: {}", lemmaModel.getLemma());
+        log.info("Леммы в базе данных сохранены");
         saveIndexModel(pageModel, lemmaModel, count);
     }
 
@@ -127,7 +126,7 @@ public class FinderLemma {
         indexModel.setLemma(lemmaModel);
         indexModel.setRank(count);
         indexRepository.save(indexModel);
-        log.info("Индексы в базе данных сохранены: {}", indexModel.getRank());
+        log.info("Индексы в базе данных сохранены");
     }
 }
 

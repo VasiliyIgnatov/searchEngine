@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @Service
 @Slf4j
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class IndexingPages {
+public class PageManager {
 
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
