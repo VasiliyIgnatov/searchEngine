@@ -104,7 +104,12 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
                     siteModel = new SiteModel();
                     siteDataService.saveSiteModel(site, siteModel);
                 }
-                return handlePageQueue(url, siteModel, pageModel, path);
+                siteDataService.deletePage(pageModel);
+                processIndexPage(siteModel, url.url(), userAgent, referrer);
+                pageService.updateSiteStatus(siteModel, Status.INDEXED, null);
+                log.info("Страница проиндексирована: {}", path);
+
+                return createSuccessResponse();
 
             } catch (IOException e) {
                 log.info("Ошибка индексации страницы: {}", e.getMessage());
@@ -176,23 +181,6 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
         finderLemmaService.processLemma(pageModel);
     }
 
-    @Transactional
-    public IndexingResponse handlePageQueue(UrlPage url, SiteModel siteModel, PageModel pageModel, String path) throws IOException {
-        if (!pageQueue.contains(url)) {
-            pageQueue.add(url);
-            log.info("Страница добавлена в очередь для проверки: {}", path);
-            return createSuccessResponse();
-        } else {
-            pageQueue.remove(url);
-
-            siteDataService.deletePage(pageModel);
-            processIndexPage(siteModel, url.url(), userAgent, referrer);
-            pageService.updateSiteStatus(siteModel, Status.INDEXED, null);
-
-            log.info("Страница проиндексирована: {}", path);
-        }
-        return createSuccessResponse();
-    }
 
     private IndexingResponse createSuccessResponse() {
         return new IndexingResponse(true);
