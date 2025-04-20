@@ -4,6 +4,8 @@ import org.apache.lucene.morphology.english.EnglishLuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.tartarus.snowball.ext.EnglishStemmer;
+import org.tartarus.snowball.ext.RussianStemmer;
 
 import java.io.IOException;
 
@@ -11,12 +13,22 @@ import java.io.IOException;
 public class LuceneMorphology {
 
     @Bean
-    public org.apache.lucene.morphology.LuceneMorphology luceneMorphologyRu() throws IOException {
+    public RussianLuceneMorphology luceneMorphologyRu() throws IOException {
         return new RussianLuceneMorphology();
     }
 
     @Bean
-    org.apache.lucene.morphology.LuceneMorphology luceneMorphologyEng() throws IOException {
-        return new EnglishLuceneMorphology();
+    EnglishLuceneMorphology luceneMorphologyEng() throws IOException {
+        return new  EnglishLuceneMorphology();
+    }
+
+    @Bean
+    RussianStemmer russianStemmer() {
+        return new RussianStemmer();
+    }
+
+    @Bean
+    EnglishStemmer englishStemmer() {
+        return new EnglishStemmer();
     }
 }

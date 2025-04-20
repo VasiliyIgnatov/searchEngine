@@ -7,6 +7,8 @@ import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.tartarus.snowball.ext.EnglishStemmer;
+import org.tartarus.snowball.ext.RussianStemmer;
 import searchengine.dto.search.Match;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.search.SearchResult;
@@ -24,6 +26,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -40,6 +43,8 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
     private final SiteRepository siteRepository;
     private final LuceneMorphology luceneMorphologyRu;
     private final LuceneMorphology luceneMorphologyEng;
+    private final RussianStemmer russianStemmer;
+    private final EnglishStemmer englishStemmer;
     private static final double FREQUENCY_THRESHOLD = 0.8;
 
     @Transactional
@@ -104,8 +109,8 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
     private Set<String> extractAndProcessLemmas(String query) {
         List<String> targetWordsRu = finderLemmaService.extractWordsFromContent(query, FinderLemma.REGEX_RU);
         List<String> targetWordsEng = finderLemmaService.extractWordsFromContent(query, FinderLemma.REGEX_ENG);
-        Set<String> lemmasSet = new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsRu, luceneMorphologyRu).keySet());
-        lemmasSet.addAll(new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsEng, luceneMorphologyEng).keySet()));
+        Set<String> lemmasSet = new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsRu, luceneMorphologyRu, () -> russianStemmer).keySet());
+        lemmasSet.addAll(new ConcurrentSkipListSet<>(finderLemmaService.mapLemmaAndCounts(targetWordsEng, luceneMorphologyEng, () -> englishStemmer).keySet()));
         return lemmasSet;
     }
 
@@ -161,20 +166,38 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
 
     @Transactional(readOnly = true)
     public Map<PageModel, Float> calculateRelevance(List<PageModel> pages) {
-        Map<PageModel, Float> relevanceMap =
-                pages.stream()
-                        .collect(Collectors.toMap(
-                                page -> page,
-                                indexRepository::sumRankByPage
-                        ));
+        if (pages.isEmpty()) {
+            return Collections.emptyMap();
+        }
 
-        float maxRelevance = relevanceMap.values().stream()
-                .max(Float::compareTo)
-                .orElse(1.0F);
+        List<Integer> pageIds = pages.stream()
+                .map(PageModel::getId)
+                .toList();
+        Map<Integer, Float> ranksByPageId = indexRepository.sumRankByPageIds(pageIds).stream()
+                .collect(Collectors.toMap(
+                        tuple -> ((Number) ((Object[]) tuple)[0]).intValue(),
+                        tuple -> ((Number) ((Object[]) tuple)[1]).floatValue(),
+                        (existing, replacement) -> existing, HashMap::new
+                ));
+        return pages.stream()
+                .collect(
+                        Collectors.collectingAndThen(
+                                Collectors.toMap(
+                                        Function.identity(),
+                                        page -> ranksByPageId.getOrDefault(page.getId(), 0.0F)
+                                ),
+                                map -> {
+                                    float max = map.values().stream()
+                                            .max(Float::compare)
+                                            .orElse(1.0F);
 
-        relevanceMap.replaceAll((page, relevance) -> relevance / maxRelevance);
-
-        return relevanceMap;
+                                    if (max > 0) {
+                                        map.replaceAll((k, v) -> v / max);
+                                    }
+                                    return map;
+                                }
+                        )
+                );
     }
 
     private static String extractTitleFromHtml(String htmlContent) {
@@ -205,6 +228,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         List<String> queryWords = Arrays.asList(query.split("[\\s,.!?;:]"));
         List<String> matchingWords = findAllMatchingWords(sortLemmas, pageWords, queryWords);
         String matchingWord = findMatchingWord(matchingWords, pageWords);
+        log.info("Найденное слова: {}", matchingWord);
 
         if (matchingWord.isEmpty()) {
             return "";
@@ -233,6 +257,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
         }
 
         String snippetRaw = text.substring(snippetStart, snippetEnd);
+        log.info("Найденный отрывок: {}", snippetRaw);
 
         StringBuilder snippet = new StringBuilder();
 
@@ -263,7 +288,7 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
 
     }
 
-    private StringBuilder highlightingSnippet (List<Match> allMatches, String snippetRaw, StringBuilder snippet) {
+    private StringBuilder highlightingSnippet(List<Match> allMatches, String snippetRaw, StringBuilder snippet) {
         AtomicInteger lastPos = new AtomicInteger(0);
         allMatches.forEach(match -> {
             snippet.append(snippetRaw, lastPos.get(), match.start());
@@ -285,20 +310,20 @@ public class SearchServiceImpl implements SearchService<SearchResponse> {
 
         return pageWords.stream()
                 .filter(word -> sortedLemmas.stream()
-                        .anyMatch(lemma -> word.equalsIgnoreCase(lemma) || word.contains(lemma)))
+                        .anyMatch(lemma -> word.equalsIgnoreCase(lemma) || word.toLowerCase().contains(lemma.toLowerCase())))
                 .distinct()
                 .collect(Collectors.toList());
 
     }
 
     private String findMatchingWord(List<String> matchingWords, List<String> pageWords) {
-        log.info("Все найденные слова: {}", matchingWords);
-        return matchingWords.stream()
-                .filter(matchingWord -> pageWords.stream()
-                        .anyMatch(word -> matchingWord.equalsIgnoreCase(word) || matchingWord.contains(word)))
-                        .findFirst()
-                        .orElse("");
+        return pageWords.stream()
+                .filter(pageWord -> matchingWords.stream()
+                        .anyMatch(matchingWord -> pageWord.toLowerCase().startsWith(matchingWord.toLowerCase())))
+                .findFirst()
+                .orElse("");
     }
+
 
     private String prepareText(String content) {
         if (StringUtils.isBlank(content)) {

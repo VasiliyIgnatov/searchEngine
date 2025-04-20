@@ -48,7 +48,6 @@ public class IndexingServiceImpl implements IndexingService<IndexingResponse> {
     private final FinderLemma finderLemmaService;
     private final String userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0";
     private final String referrer = "https://www.google.com";
-    private final ConcurrentLinkedQueue<UrlPage> pageQueue = new ConcurrentLinkedQueue<>();
 
     @Transactional
     @Override

@@ -1,5 +1,6 @@
 package searchengine.repositories;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -8,6 +9,7 @@ import searchengine.model.LemmaModel;
 import searchengine.model.PageModel;
 
 import java.util.List;
+import java.util.Set;
 
 public interface IndexRepository extends JpaRepository<IndexModel, Integer> {
     List<IndexModel> findByPage(PageModel pageModel);
@@ -27,4 +29,19 @@ public interface IndexRepository extends JpaRepository<IndexModel, Integer> {
 
     @Query("SELECT i.page FROM IndexModel i WHERE i.lemma.lemma = :lemma")
     List<PageModel> findPagesByLemma(@Param("lemma") String lemma);
+
+    @Query("SELECT i.page.id, SUM(i.rank) FROM IndexModel i WHERE i.page.id IN :pageIds GROUP BY i.page.id")
+    List<Object[]> sumRankByPageIds(@Param("pageIds") List<Integer> pageIds);
+
+    @Query("SELECT DISTINCT i.page.id from IndexModel i " +
+            "WHERE i.lemma.lemma in :lemmas " +
+            "and (:siteId is null or i.page.site.id = :siteId) " +
+            "order by sum(i.rank) desc")
+    List<Integer> findPageIdsByLemmas(@Param("lemmas") Set<String> lemmas, @Param("siteId") Integer siteId, Pageable pageable);
+
+    @Query("select count (distinct i.page.id) from IndexModel  i " +
+            "where i.lemma.lemma in :lemmas " +
+            "and (:siteId is null or i.page.site.id = :sideId)")
+    long countPagesByLemmas(@Param("lemmas") Set<String> lemmas, @Param("siteId") Integer siteId);
+
 }

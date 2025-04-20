@@ -6,6 +6,9 @@ import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.tartarus.snowball.SnowballProgram;
+import org.tartarus.snowball.ext.RussianStemmer;
+import org.tartarus.snowball.ext.EnglishStemmer;
 import searchengine.model.IndexModel;
 import searchengine.model.LemmaModel;
 import searchengine.model.PageModel;
@@ -13,8 +16,8 @@ import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,6 +31,8 @@ public class FinderLemma {
     private final IndexRepository indexRepository;
     private final LuceneMorphology luceneMorphologyRu;
     private final LuceneMorphology luceneMorphologyEng;
+    private final RussianStemmer russianStemmer;
+    private final EnglishStemmer englishStemmer;
     public static final String[] PARTICLES_NAMES = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ", "ЧАСТ", "МС",
             "ARTICLE", "CONJ", "PREP"};
     private static final int START_FREQUENCY = 1;
@@ -40,49 +45,31 @@ public class FinderLemma {
 
         List<String> targetWordsRu = extractWordsFromContent(pageModel.getContent(), REGEX_RU);
         List<String> targetWordsEng = extractWordsFromContent(pageModel.getContent(), REGEX_ENG);
-        Map<String, Integer> lemmaCountMap = mapLemmaAndCounts(targetWordsRu, luceneMorphologyRu);
-        lemmaCountMap.putAll(mapLemmaAndCounts(targetWordsEng, luceneMorphologyEng));
+        Map<String, Integer> lemmaCountMap = mapLemmaAndCounts(targetWordsRu, luceneMorphologyRu, () -> russianStemmer);
+        lemmaCountMap.putAll(mapLemmaAndCounts(targetWordsEng, luceneMorphologyEng, () -> englishStemmer));
 
-        lemmaCountMap.forEach((lemma, rank) -> {
-            processLemmaEntry(lemma, rank, pageModel);
-        });
+        lemmaCountMap.forEach((lemma, rank) -> processLemmaEntry(lemma, rank, pageModel));
         log.info("Произведена запись лемм в количестве: {}", lemmaCountMap.size());
 
     }
 
     @Transactional
-    public Map<String, Integer> mapLemmaAndCounts(List<String> words, LuceneMorphology luceneMorphology) {
-        Map<String, Integer> lemmaCountMap = new ConcurrentHashMap<>();
-
-        List<String> filteredWords = words.stream()
+    public Map<String, Integer> mapLemmaAndCounts(List<String> words, LuceneMorphology luceneMorphology, Supplier<SnowballProgram> stemmer) {
+        return words.stream()
                 .filter(word -> !word.isBlank())
                 .map(String::toLowerCase)
-                .flatMap(word -> luceneMorphology.getMorphInfo(word).stream())
+                .flatMap(word -> safeGetMorphInfo(luceneMorphology, word))
                 .filter(morphInfo -> Arrays.stream(PARTICLES_NAMES).noneMatch(morphInfo::contains))
-                .flatMap(morphInfo -> {
-                    if (morphInfo.isBlank()) {
-                        return Stream.empty();
-                    }
-                    List<String> clearForms = new CopyOnWriteArrayList<>();
-                    clearForms.add(morphInfo.split("\\|")[0]);
-                    return clearForms.stream();
-                })
-                .filter(luceneMorphology::checkString)
-                .flatMap(normalForm -> {
-                    try {
-                        List<String> normalForms = luceneMorphology.getNormalForms(normalForm);
-                        return normalForms != null ? normalForms.stream() : Stream.empty();
-                    } catch (Exception e) {
-                        log.warn("Ошибка при получении нормальных форм для '{}': {}", normalForm, e.getMessage());
-                        return Stream.empty();
-                    }
-                })
-                .toList();
-
-        log.info("Леммы из слов изъяты в количестве: {}", filteredWords.size());
-
-        filteredWords.forEach(lemma -> lemmaCountMap.merge(lemma, 1, Integer::sum));
-        return lemmaCountMap;
+                .map(morphInfo -> morphInfo.split("\\|")[0])
+                .filter(particle -> !particle.isBlank())
+                .filter(word -> safeCheckString(luceneMorphology, word))
+                .flatMap(normalForm -> safeGetNormalForms(luceneMorphology, normalForm, stemmer))
+                .peek(lemma -> log.info("Изъяты леммы: {}", lemma))
+                .collect(Collectors.toConcurrentMap(
+                        lemma -> lemma,
+                        lemma -> 1,
+                        Integer::sum
+                ));
     }
 
     public List<String> extractWordsFromContent(String content, String regex) {
@@ -127,6 +114,46 @@ public class FinderLemma {
         indexModel.setRank(count);
         indexRepository.save(indexModel);
         log.info("Индексы в базе данных сохранены");
+    }
+
+    private Stream<String> safeGetMorphInfo(LuceneMorphology morphology, String word) {
+        try {
+            return morphology.getMorphInfo(word).stream();
+        } catch (Exception e) {
+            log.warn("Слово '{}' не может быть обработано морфологией: {}", word, e.getMessage());
+            return Stream.empty();
+        }
+    }
+
+    private boolean safeCheckString(LuceneMorphology morphology, String word) {
+        try {
+            return morphology.checkString(word);
+        } catch (Exception e) {
+            log.warn("Слово '{}' не прошло проверку checkString: {}", word, e.getMessage());
+            return false;
+        }
+    }
+
+    private Stream<String> safeGetNormalForms(LuceneMorphology morphology, String word, Supplier<SnowballProgram> stemmer) {
+        try {
+            return morphology.getNormalForms(word).stream()
+                    .map(lemma -> safeStem(lemma, stemmer));
+        } catch (Exception e) {
+            log.warn("Ошибка нормализации лемм '{}': {}", word, e.getMessage());
+            return Stream.empty();
+        }
+    }
+
+    private String safeStem(String lemma, Supplier<SnowballProgram> stemmer) {
+        try {
+            SnowballProgram stem = stemmer.get();
+            stem.setCurrent(lemma);
+            stem.stem();
+            return stem.getCurrent();
+        } catch (Exception e) {
+            log.warn("Ошибка стемминга слова '{}': {}", lemma, e.getMessage());
+            return lemma;
+        }
     }
 }
 
